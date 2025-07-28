@@ -2,11 +2,10 @@
   "name": "taprush-x-bot",
   "version": "1.0.0",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "type": "commonjs",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.2",
-    "@hapi/boom": "^10.0.0"
+    "@whiskeysockets/baileys": "^6.7.0",
+    "@hapi/boom": "^10.0.0",
+    "pino": "^8.0.0"
   }
 }
