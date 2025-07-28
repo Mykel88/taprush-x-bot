@@ -1,48 +1,64 @@
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore } = require("@whiskeysockets/baileys");
-const { Boom } = require("@hapi/boom");
-const P = require("pino");
-const fs = require("fs");
+const { default: makeWASocket, DisconnectReason, useSingleFileAuthState } = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
+const P = require('pino');
+const fs = require('fs');
 
 const { state, saveState } = useSingleFileAuthState('./session.json');
 
-async function startSock() {
-    const { version } = await fetchLatestBaileysVersion();
+async function startBot() {
     const sock = makeWASocket({
-        version,
+        logger: P({ level: 'silent' }),
+        printQRInTerminal: true,
         auth: state,
-        logger: P({ level: "silent" }),
-        printQRInTerminal: true
+        browser: ['TAPRUSH X', 'Safari', '1.0.0'],
     });
 
-    sock.ev.on("creds.update", saveState);
+    // Save auth state on changes
+    sock.ev.on('creds.update', saveState);
 
-    sock.ev.on("connection.update", (update) => {
+    // Connection updates
+    sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === "close") {
-            const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log("connection closed due to", lastDisconnect.error, ", reconnecting...", shouldReconnect);
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Connection closed. Reconnecting...', shouldReconnect);
             if (shouldReconnect) {
-                startSock();
+                startBot();
             }
-        } else if (connection === "open") {
-            console.log("✅ Connected to WhatsApp");
+        } else if (connection === 'open') {
+            console.log('✅ BOT CONNECTED — TAPRUSH X');
         }
     });
 
-    sock.ev.on("messages.upsert", async ({ messages }) => {
-        const m = messages[0];
-        if (!m.message) return;
+    // Message handler
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+        const msg = messages[0];
+        if (!msg.message  msg.key.fromMe) return;
 
-        const msg = m.message.conversation || m.message.extendedTextMessage?.text;
+        const from = msg.key.remoteJid;
+        const body = msg.message.conversation  msg.message.extendedTextMessage?.text || '';
 
-        if (msg?.toLowerCase() === ".alive") {
-            await sock.sendMessage(m.key.remoteJid, { text: "*🤖 TAPRUSH X BOT ONLINE!*" });
+        if (body === '.ping') {
+            await sock.sendMessage(from, { text: '🏓 TAPRUSH X is alive!' });
         }
 
-        if (msg?.toLowerCase() === ".ping") {
-            await sock.sendMessage(m.key.remoteJid, { text: "*🏓 Pong!*" });
+        if (body === '.alive') {
+            await sock.sendMessage(from, { text: '✅ TAPRUSH X BOT is working perfectly.' });
+        }
+
+        if (body === '.join') {
+            const linkRegex = /chat\.whatsapp\.com\/([0-9A-Za-z]{20,24})/i;
+            const match = body.match(linkRegex);
+            if (match) {
+                const groupInviteCode = match[1];
+                await sock.groupAcceptInvite(groupInviteCode);
+                await sock.sendMessage(from, { text: '✅ I joined the group successfully!' });
+            } else {
+                await sock.sendMessage(from, { text: '❌ Invalid group link. Use a full WhatsApp group invite link.' });
+            }
         }
     });
 }
 
-startSock();
+startBot();
