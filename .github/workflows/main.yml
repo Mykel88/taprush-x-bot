@@ -1,0 +1,14 @@
+name: Deploy TAPRUSH X WhatsApp Bot
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔄
