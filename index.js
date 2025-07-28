@@ -1,47 +1,48 @@
-const { default: makeWASocket, useSingleFileAuthState } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeInMemoryStore } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
+const P = require("pino");
 const fs = require("fs");
-const { state, saveState } = useSingleFileAuthState("./session.json");
 
-async function startBot() {
-  const sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: true,
-  });
+const { state, saveState } = useSingleFileAuthState('./session.json');
 
-  sock.ev.on("creds.update", saveState);
+async function startSock() {
+    const { version } = await fetchLatestBaileysVersion();
+    const sock = makeWASocket({
+        version,
+        auth: state,
+        logger: P({ level: "silent" }),
+        printQRInTerminal: true
+    });
 
-  sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
-    if (connection === "close") {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      console.log("connection closed due to", lastDisconnect?.error, "reconnecting", shouldReconnect);
-      if (shouldReconnect) {
-        startBot();
-      }
-    } else if (connection === "open") {
-      console.log("TAPRUSH X is now online ✅");
-    }
-  });
+    sock.ev.on("creds.update", saveState);
 
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message) return;
+    sock.ev.on("connection.update", (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === "close") {
+            const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log("connection closed due to", lastDisconnect.error, ", reconnecting...", shouldReconnect);
+            if (shouldReconnect) {
+                startSock();
+            }
+        } else if (connection === "open") {
+            console.log("✅ Connected to WhatsApp");
+        }
+    });
 
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-    const sender = msg.key.remoteJid;
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+        const m = messages[0];
+        if (!m.message) return;
 
-    if (text === ".ping") {
-      await sock.sendMessage(sender, { text: "🏓 TAPRUSH X is active!" });
-    }
+        const msg = m.message.conversation || m.message.extendedTextMessage?.text;
 
-    if (text === ".alive") {
-      await sock.sendMessage(sender, { text: "🔥 TAPRUSH X Bot is online and ready to hustle!" });
-    }
+        if (msg?.toLowerCase() === ".alive") {
+            await sock.sendMessage(m.key.remoteJid, { text: "*🤖 TAPRUSH X BOT ONLINE!*" });
+        }
 
-    if (text === ".join") {
-      await sock.sendMessage(sender, { text: "Click this link to join Linebet now:\n👉 https://vipersensi.lineorgs.com/\nPromo Code: vipersensi" });
-    }
-  });
+        if (msg?.toLowerCase() === ".ping") {
+            await sock.sendMessage(m.key.remoteJid, { text: "*🏓 Pong!*" });
+        }
+    });
 }
 
-startBot();
+startSock();
